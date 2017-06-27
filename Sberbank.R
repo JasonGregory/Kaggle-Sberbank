@@ -1,28 +1,151 @@
+# Set options and load libraries
+
 options(max.print=999999)
-
-library(dataFun)
+options(scipen=999)
+# library(dataFun)
 library(vtreat)
+library(tidyverse)
+library(forcats)
 
-setwd("~/Documents/Kaggle/Russian Housing")
+# Pull in data
+iData <- read_csv("train.csv")
+iData %>%
+  select(price_doc, ends_with("all")) %>%
+  gather(category, population,c(`0_6_male`:`0_13_female`,male_f:ekder_female)) %>%
+  count(category)
+  
+iData %>%
+  select(full_all:`0_13_female`)
+
+  
+  
+  select(age_cat, population)
+
+
+
+  select(`0_6_male`) %>%
+  separate(`0_6_male`, c("age_cat", "Sex"))
+  
+  select(`0_6_male`:`0_13_female`) %>%
+  separate(`0_6_male`:`0_13_female`, c("age_cat", "Sex"), sep = 5)
+  
+  gather(`0_6_male`:``)
+  
+  
+  select(full_all, male_f, female_f, young_all, young_male, young_female, work_all, work_male) %>%
+  gather("Category", "Population", c("male_f","female_f"))
+
+spec(iData)
+
 
 #Pulling in data
 train_data <- read.csv("train.csv")
-macro_data <- read.csv("macro.csv")
+#macro_data <- read.csv("macro.csv")
 
+#head(train_data)
+#prepIt(train_data)
 
-head(train_data)
-prepIt(train_data)
+doSplit <- function(dta, split){
+  set.seed(123)
+  trn <- runif(nrow(dta)) < split
+  train <<- dta[trn==TRUE,]
+  test <<- dta[trn==FALSE,]
+}
+
+###doing vtreat method
+doSplit(train_data,.75)
+outcome <- "price_doc"
+vars = setdiff(colnames(train), c(p.unique(train),outcome))
+#method 1
+treatplan1 = designTreatmentsN(train,vars,outcome)
+sframe1 <- treatplan1$scoreFrame
+sframe1$sig <- round(sframe1$sig,4)
+aVars <- sframe1$varName[!(sframe1$code %in% c("catP", "catD"))]
+sframe1[sframe1$varName %in% aVars,
+        c("origName","varName", "sig", "code")] %>%
+  dplyr::filter(sig>.001) %>%
+  arrange(sig)
+
+train1.treat = prepare(treatplan1, train)
+fmla1 = paste(outcome, " ~ ", paste(aVars, collapse=" + "))
+model2 = lm(fmla1, data=train1.treat)
+summary(model2)
+
+#method 2
+treatplan2 = mkCrossFrameNExperiment(train,vars,outcome)
+sframe2 <- treatplan2$treatments$scoreFrame
+sframe2$sig <- round(sframe2$sig,4)
+aVars2 <- sframe2$varName[!(sframe1$code %in% c("catP", "catD"))]
+sframe2[sframe2$varName %in% aVars2,
+        c("origName","varName", "sig", "code")] %>%
+  dplyr::filter(sig>.001) %>%
+  arrange(sig)
+
+train2.treat = prepare(treatplan2, train)
+fmla1 = paste(outcome, " ~ ", paste(aVars, collapse=" + "))
+model2 = lm(fmla1, data=train1.treat)
+summary(model2)
+
+#sframe1$varName[sframe1$sig<1/nrow(sframe1)] 
+
 
 #trying out the vtreat method
 outcome <- "price_doc"
-treatmentsN = designTreatmentsN(train_data,colnames(train_data),outcome)
+vars = setdiff(colnames(train_data), c(p.unique(train_data),outcome))
+treatmentsN = designTreatmentsN(train_data,vars,outcome)
+treatplan <- treatmentsN
+sframe <- treatplan$scoreFrame
+sframe$varName[sframe$sig<1/nrow(sframe)] #limiting to 1/n of the variables basic way to do it.
+vars <- sframe$varName[!(sframe$code %in% c("catP", "catD"))]
+plotTest <- sframe[sframe$varName %in% vars,
+                    c("origName","varName", "sig", "extraModelDegrees")]
+plotTest <- sframe[sframe$varName %in% vars,
+                   c("origName","varName", "sig", "code")]
+
+plotTest$sig  <- round(plotTest$sig,4)
+1/length(colnames(train_data))
+
+plotTest2 %>% 
+  dplyr::filter(sig>.1) %>%
+  arrange(sig)
+
+
+#iteration 2
+treatmentsN2 = mkCrossFrameNExperiment(train_data,vars,outcome)
+sframe2 <- treatmentsN2$treatments$scoreFrame
+sframe2$varName[sframe2$sig<1/nrow(sframe)]
+vars <- sframe2$varName[!(sframe2$code %in% c("catP", "catD"))]
+plotTest2 <- sframe2[sframe2$varName %in% vars,
+                   c("origName","varName", "sig", "extraModelDegrees")]
+plotTest2$sig  <- round(plotTest2$sig,4)
+plotTest2 %>% 
+  arrange(sig)
+
+
+str(plotTest)
+
+plotTest$sig
+
+
+# Build a map from vtreat names back to reasonable display names
+vmap <-as.list(treatmentsN$scoreFrame$origName)
+names(vmap) <-treatmentsN$scoreFrame$varName
+print(vmap['timestamp_catP'])
+
+
+
 train.treat = prepare(treatmentsN, train_data) #set pruneLevel=Null to include all variables
-vars = setdiff(colnames(train.treat), c("id_clean",outcome))
+
 fmla = paste(outcome, " ~ ", paste(vars, collapse=" + "))
 model2 = lm(fmla, data=train.treat)
-summary(model2)
+
+anova(model2)
+?anova
+?vtreat
+?xgboost
 
 
+?lm
 
 head(treatmentsN)
 
